@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Mercado</title>
+</head>
+<body>
+<!-- Cole este código dentro da tag <body> do seu arquivo HTML no VS Code -->
+
+<div class="container">
+    <h1>🛒 Lista Inteligente</h1>
+    <p class="subtitle">Com histórico de preços, Sra. Jessica!</p>
+
+    <div class="google-status desconectado" id="googleStatus">
+        ⚠️ Configure o Google Sheets para salvar na nuvem
+    </div>
+
+    <button class="btn-config" onclick="toggleConfig()">⚙️ Configurar Google Sheets</button>
+
+    <div class="config-section" id="configSection">
+        <p style="font-size: 0.85em; color: #666; margin-bottom: 10px;">
+            1. Crie uma planilha no Google Sheets<br>
+            2. Vá em Extensões > Apps Script<br>
+            3. Cole o código do README e implante<br>
+            4. Cole a URL do Apps Script aqui:
+        </p>
+        <input type="url" id="googleScriptUrl" placeholder="https://script.google.com/macros/s/.../exec">
+        <button class="btn-add" onclick="salvarConfigGoogle()">Salvar Configuração</button>
+    </div>
+
+    <div class="input-group">
+        <input type="text" id="itemNome" placeholder="Nome do item..." autocomplete="off">
+        <input type="number" id="itemValor" placeholder="R$ 0,00" step="0.01" min="0">
+        <button class="btn-voz" id="btnVoz" onclick="toggleVoz()" title="Comando de Voz">🎤</button>
+        <button class="btn-add" onclick="adicionarItem()">Adicionar</button>
+    </div>
+
+    <div class="voz-status" id="vozStatus"></div>
+
+    <div class="lista-container" id="listaItens">
+        <div class="empty-state">Sua lista está vazia. Adicione itens acima!</div>
+    </div>
+
+    <div class="total-container">
+        <div class="total-label">Total da Compra</div>
+        <div class="total-valor" id="totalValor">R$ 0,00</div>
+    </div>
+
+    <div class="botoes-controle">
+        <button class="btn-salvar" onclick="salvarNoGoogle()">
+            💾 Salvar no Google
+            <span class="loading" id="loadingSalvar" style="display: none;"></span>
+        </button>
+        <button class="limpar-tudo" onclick="limparTudo()">Limpar Lista</button>
+    </div>
+
+    <div class="historico-section">
+        <div class="historico-title">
+            📊 Histórico de Preços
+            <button class="btn-config" style="margin-left: auto;" onclick="carregarHistorico()">🔄 Atualizar</button>
+        </div>
+        <div class="historico-lista" id="historicoLista">
+            <div class="empty-state" style="padding: 20px;">Clique em "Atualizar" para ver o histórico</div>
+        </div>
+    </div>
+</div>
+
+<div class="overlay" id="overlay" onclick="fecharAlerta()"></div>
+<div class="alerta-jessica" id="alertaJessica">
+    <h2>⚠️ Alerta!</h2>
+    <p>Não Gaste Muito Sra Jessica !!!</p>
+    <button class="btn-fechar-alerta" onclick="fecharAlerta()">Entendido</button>
+</div>
+
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    }
+
+    .container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        padding: 40px;
+        width: 100%;
+        max-width: 600px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 5px;
+        background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+    }
+
+    h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 10px;
+        font-size: 2em;
+    }
+
+    .subtitle {
+        text-align: center;
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 0.9em;
+    }
+
+    .google-status {
+        text-align: center;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 0.85em;
+        font-weight: 600;
+    }
+
+    .google-status.conectado {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .google-status.desconectado {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .config-section {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        display: none;
+    }
+
+    .config-section.active {
+        display: block;
+    }
+
+    .config-section input {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .btn-config {
+        background: #6c757d;
+        color: white;
+        padding: 8px 15px;
+        font-size: 0.9em;
+        margin-bottom: 15px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: 600;
+    }
+
+    .btn-config:hover {
+        background: #5a6268;
+    }
+
+    .input-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    input, select {
+        flex: 1;
+        padding: 12px 15px;
+        border: 2px solid #e0e0e0;
+        border-radius: 10px;
+        font-size: 16px;
+        transition: all 0.3s;
+        min-width: 100px;
+    }
+
+    input:focus, select:focus {
+        outline: none;
+        border-color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+    }
+
+    #itemValor {
+        max-width: 120px;
+    }
+
+    button {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: all 0.3s;
+        font-weight: 600;
+    }
+
+    .btn-add {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        flex: 1;
+    }
+
+    .btn-add:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-voz {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        width: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+    }
+
+    .btn-voz:hover {
+        transform: scale(1.1);
+    }
+
+    .btn-voz.listening {
+        animation: pulse 1.5s infinite;
+    }
+
+    .btn-voz:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        animation: none;
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+    }
+
+    .lista-container {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-bottom: 20px;
+    }
+
+    .item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        transition: all 0.3s;
+        animation: slideIn 0.3s ease;
+        position: relative;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    }
+
+    .item-info {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+    }
+
+    .item-nome {
+        font-weight: 600;
+        color: #333;
+        font-size: 1.1em;
+    }
+
+    .item-preco {
+        color: #667eea;
+        font-weight: 700;
+        font-size: 1.2em;
+    }
+
+    .item-comparacao {
+        font-size: 0.85em;
+        margin-top: 5px;
+        padding: 4px 8px;
+        border-radius: 5px;
+        display: inline-block;
+    }
+
+    .item-comparacao.barato {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .item-comparacao.caro {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .item-comparacao.igual {
+        background: #e2e3e5;
+        color: #383d41;
+    }
+
+    .item-comparacao.novo {
+        background: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .btn-remover {
+        background: #ff6b6b;
+        color: white;
+        padding: 8px 15px;
+        font-size: 14px;
+        margin-left: 10px;
+    }
+
+    .btn-remover:hover {
+        background: #ff5252;
+        transform: scale(1.05);
+    }
+
+    .total-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center;
+        margin-top: 20px;
+    }
+
+    .total-label {
+        font-size: 0.9em;
+        opacity: 0.9;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+
+    .total-valor {
+        font-size: 2.5em;
+        font-weight: 700;
+        margin-top: 5px;
+    }
+
+    .historico-section {
+        margin-top: 20px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 15px;
+    }
+
+    .historico-title {
+        font-size: 1.2em;
+        color: #333;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .historico-lista {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .historico-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px;
+        border-bottom: 1px solid #dee2e6;
+        font-size: 0.9em;
+    }
+
+    .historico-item:last-child {
+        border-bottom: none;
+    }
+
+    .alerta-jessica {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+        color: white;
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        z-index: 1000;
+        text-align: center;
+        animation: bounceIn 0.6s;
+        max-width: 90%;
+        width: 400px;
+    }
+
+    @keyframes bounceIn {
+        0% { transform: translate(-50%, -50%) scale(0); }
+        50% { transform: translate(-50%, -50%) scale(1.1); }
+        100% { transform: translate(-50%, -50%) scale(1); }
+    }
+
+    .alerta-jessica h2 {
+        font-size: 2em;
+        margin-bottom: 15px;
+    }
+
+    .alerta-jessica p {
+        font-size: 1.3em;
+        margin-bottom: 20px;
+    }
+
+    .btn-fechar-alerta {
+        background: white;
+        color: #ff6b6b;
+        padding: 12px 30px;
+        font-weight: 700;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .btn-fechar-alerta:hover {
+        transform: scale(1.05);
+    }
+
+    .overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 999;
+    }
+
+    .voz-status {
+        text-align: center;
+        color: #666;
+        font-size: 0.9em;
+        margin-top: 10px;
+        min-height: 20px;
+    }
+
+    .empty-state {
+        text-align: center;
+        color: #999;
+        padding: 40px;
+        font-style: italic;
+    }
+
+    .botoes-controle {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .btn-salvar {
+        background: #28a745;
+        color: white;
+        flex: 1;
+    }
+
+    .btn-salvar:hover {
+        background: #218838;
+    }
+
+    .limpar-tudo {
+        background: #6c757d;
+        color: white;
+        flex: 1;
+    }
+
+    .limpar-tudo:hover {
+        background: #5a6268;
+    }
+
+    .loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-left: 10px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 480px) {
+        .container {
+            padding: 20px;
+        }
+        
+        h1 {
+            font-size: 1.5em;
+        }
+        
+        .input-group {
+            flex-direction: column;
+        }
+        
+        #itemValor {
+            max-width: 100%;
+        }
+        
+        .btn-voz {
+            width: 100%;
+            height: 50px;
+        }
+    }
+</style>
+
+<script>
+    // Variáveis globais
+    let itens = [];
+    let historicoPrecos = {};
+    let reconhecimentoVoz = null;
+    let estaOuvindo = false;
+    let alertaMostrado = false;
+    let googleScriptUrl = localStorage.getItem('googleScriptUrl') || '';
+
+    // Inicialização
+    document.addEventListener('DOMContentLoaded', function() {
+        inicializarReconhecimentoVoz();
+        carregarDadosLocais();
+        atualizarStatusGoogle();
+        
+        if (googleScriptUrl) {
+            carregarHistorico();
+        }
+    });
+
+    function toggleConfig() {
+        const section = document.getElementById('configSection');
+        section.classList.toggle('active');
+        if (googleScriptUrl) {
+            document.getElementById('googleScriptUrl').value = googleScriptUrl;
+        }
+    }
+
+    function salvarConfigGoogle() {
+        const url = document.getElementById('googleScriptUrl').value.trim();
+        if (!url || !url.includes('script.google.com')) {
+            alert('Por favor, insira uma URL válida do Google Apps Script');
+            return;
+        }
+        googleScriptUrl = url;
+        localStorage.setItem('googleScriptUrl', url);
+        atualizarStatusGoogle();
+        alert('Configuração salva! Clique em "Atualizar" no histórico.');
+        toggleConfig();
+    }
+
+    function atualizarStatusGoogle() {
+        const status = document.getElementById('googleStatus');
+        if (googleScriptUrl) {
+            status.textContent = '✅ Conectado ao Google Sheets';
+            status.className = 'google-status conectado';
+        } else {
+            status.textContent = '⚠️ Configure o Google Sheets para salvar na nuvem';
+            status.className = 'google-status desconectado';
+        }
+    }
+
+    function inicializarReconhecimentoVoz() {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            reconhecimentoVoz = new SpeechRecognition();
+            reconhecimentoVoz.lang = 'pt-BR';
+            reconhecimentoVoz.continuous = false;
+            reconhecimentoVoz.interimResults = false;
+
+            reconhecimentoVoz.onstart = function() {
+                estaOuvindo = true;
+                document.getElementById('vozStatus').textContent = '🎤 Ouvindo... Fale "item valor"';
+                document.getElementById('btnVoz').classList.add('listening');
+            };
+
+            reconhecimentoVoz.onend = function() {
+                estaOuvindo = false;
+                document.getElementById('btnVoz').classList.remove('listening');
+                setTimeout(() => {
+                    if (!estaOuvindo) document.getElementById('vozStatus').textContent = '';
+                }, 3000);
+            };
+
+            reconhecimentoVoz.onresult = function(event) {
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                processarComandoVoz(transcript);
+            };
+
+            reconhecimentoVoz.onerror = function(event) {
+                document.getElementById('vozStatus').textContent = 'Erro: ' + event.error;
+                estaOuvindo = false;
+                document.getElementById('btnVoz').classList.remove('listening');
+            };
+        } else {
+            document.getElementById('vozStatus').textContent = '⚠️ Voz não suportada neste navegador';
+            document.getElementById('btnVoz').disabled = true;
+        }
+    }
+
+    function toggleVoz() {
+        if (!reconhecimentoVoz) {
+            alert('Use Chrome ou Edge para comando de voz');
+            return;
+        }
+        if (estaOuvindo) {
+            reconhecimentoVoz.stop();
+        } else {
+            try {
+                reconhecimentoVoz.start();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    }
+
+    function processarComandoVoz(texto) {
+        const match = texto.match(/(.+?)\s+(\d+[.,]?\d*)/);
+        if (match) {
+            let nome = match[1].replace(/\b(reais?|real)\b/g, '').trim();
+            let valor = parseFloat(match[2].replace(',', '.'));
+            if (nome && !isNaN(valor)) {
+                document.getElementById('itemNome').value = nome.charAt(0).toUpperCase() + nome.slice(1);
+                document.getElementById('itemValor').value = valor.toFixed(2);
+                adicionarItem();
+                document.getElementById('vozStatus').textContent = `✓ ${nome}: R$ ${valor.toFixed(2)}`;
+            }
+        } else {
+            document.getElementById('vozStatus').textContent = '❌ Diga: "item valor"';
+        }
+    }
+
+    function adicionarItem() {
+        const nomeInput = document.getElementById('itemNome');
+        const valorInput = document.getElementById('itemValor');
+        
+        const nome = nomeInput.value.trim();
+        const valor = parseFloat(valorInput.value);
+
+        if (!nome || isNaN(valor) || valor < 0) {
+            alert('Preencha nome e valor válidos');
+            return;
+        }
+
+        const item = {
+            id: Date.now(),
+            nome: nome,
+            valor: valor,
+            data: new Date().toISOString()
+        };
+
+        itens.push(item);
+        nomeInput.value = '';
+        valorInput.value = '';
+        nomeInput.focus();
+
+        renderizarLista();
+        atualizarTotal();
+        salvarDadosLocais();
+    }
+
+    function removerItem(id) {
+        itens = itens.filter(item => item.id !== id);
+        renderizarLista();
+        atualizarTotal();
+        salvarDadosLocais();
+        
+        const total = itens.reduce((soma, item) => soma + item.valor, 0);
+        if (total <= 100) alertaMostrado = false;
+    }
+
+    function renderizarLista() {
+        const container = document.getElementById('listaItens');
+        
+        if (itens.length === 0) {
+            container.innerHTML = '<div class="empty-state">Sua lista está vazia</div>';
+            return;
+        }
+
+        container.innerHTML = itens.map(item => {
+            const comparacao = compararPreco(item.nome, item.valor);
+            return `
+                <div class="item">
+                    <div class="item-info">
+                        <span class="item-nome">${escapeHtml(item.nome)}</span>
+                        <span class="item-preco">R$ ${item.valor.toFixed(2)}</span>
+                        ${comparacao ? `<span class="item-comparacao ${comparacao.classe}">${comparacao.texto}</span>` : ''}
+                    </div>
+                    <button class="btn-remover" onclick="removerItem(${item.id})">✕</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function compararPreco(nome, valorAtual) {
+        const chave = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const historico = historicoPrecos[chave];
+        
+        if (!historico || historico.length === 0) {
+            return { classe: 'novo', texto: '🆕 Primeira compra' };
+        }
+
+        const mesAtual = new Date().toISOString().slice(0, 7);
+        const precosAnteriores = historico.filter(h => h.mes !== mesAtual);
+        
+        if (precosAnteriores.length === 0) {
+            return { classe: 'novo', texto: '🆕 Primeira compra este mês' };
+        }
+
+        const precoAnterior = precosAnteriores[precosAnteriores.length - 1].valor;
+        const diferenca = valorAtual - precoAnterior;
+        const percentual = ((diferenca / precoAnterior) * 100).toFixed(1);
+
+        if (diferenca < -0.01) {
+            return { classe: 'barato', texto: `📉 ${percentual}% vs mês anterior` };
+        } else if (diferenca > 0.01) {
+            return { classe: 'caro', texto: `📈 +${percentual}% vs mês anterior` };
+        } else {
+            return { classe: 'igual', texto: `➡️ Mesmo preço` };
+        }
+    }
+
+    function atualizarTotal() {
+        const total = itens.reduce((soma, item) => soma + item.valor, 0);
+        document.getElementById('totalValor').textContent = `R$ ${total.toFixed(2)}`;
+
+        if (total > 100 && !alertaMostrado) {
+            mostrarAlertaJessica();
+            alertaMostrado = true;
+        }
+    }
+
+    function mostrarAlertaJessica() {
+        document.getElementById('overlay').style.display = 'block';
+        document.getElementById('alertaJessica').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function fecharAlerta() {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('alertaJessica').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    function limparTudo() {
+        if (itens.length === 0) return;
+        if (confirm('Limpar toda a lista?')) {
+            itens = [];
+            alertaMostrado = false;
+            renderizarLista();
+            atualizarTotal();
+            salvarDadosLocais();
+        }
+    }
+
+    function salvarDadosLocais() {
+        localStorage.setItem('listaMercadoItens', JSON.stringify(itens));
+        localStorage.setItem('listaMercadoHistorico', JSON.stringify(historicoPrecos));
+    }
+
+    function carregarDadosLocais() {
+        const itensSalvos = localStorage.getItem('listaMercadoItens');
+        const historicoSalvo = localStorage.getItem('listaMercadoHistorico');
+        
+        if (itensSalvos) {
+            itens = JSON.parse(itensSalvos);
+            renderizarLista();
+            atualizarTotal();
+        }
+        if (historicoSalvo) {
+            historicoPrecos = JSON.parse(historicoSalvo);
+        }
+    }
+
+    async function salvarNoGoogle() {
+        if (!googleScriptUrl) {
+            alert('Configure o Google Sheets primeiro!');
+            toggleConfig();
+            return;
+        }
+
+        if (itens.length === 0) {
+            alert('Adicione itens antes de salvar');
+            return;
+        }
+
+        document.getElementById('loadingSalvar').style.display = 'inline-block';
+
+        try {
+            const dados = {
+                itens: itens,
+                data: new Date().toISOString(),
+                total: itens.reduce((soma, item) => soma + item.valor, 0)
+            };
+
+            const response = await fetch(googleScriptUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(dados)
+            });
+
+            setTimeout(() => {
+                alert('Dados salvos no Google Sheets! ✅');
+                document.getElementById('loadingSalvar').style.display = 'none';
+                carregarHistorico();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Erro:', error);
+            alert('Erro ao salvar. Verifique a URL e as permissões do Apps Script.');
+            document.getElementById('loadingSalvar').style.display = 'none';
+        }
+    }
+
+    async function carregarHistorico() {
+        if (!googleScriptUrl) {
+            document.getElementById('historicoLista').innerHTML = 
+                '<div class="empty-state">Configure o Google Sheets primeiro</div>';
+            return;
+        }
+
+        document.getElementById('historicoLista').innerHTML = '<div class="loading"></div>';
+
+        try {
+            const url = googleScriptUrl + '?action=getHistorico&t=' + Date.now();
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.historico) {
+                processarHistorico(data.historico);
+                renderizarHistorico();
+            } else {
+                throw new Error('Formato inválido');
+            }
+        } catch (error) {
+            console.error('Erro ao carregar:', error);
+            renderizarHistorico();
+            document.getElementById('historicoLista').innerHTML += 
+                '<div style="color: #856404; margin-top: 10px;">Usando dados locais</div>';
+        }
+    }
+
+    function processarHistorico(dados) {
+        historicoPrecos = {};
+        
+        dados.forEach(registro => {
+            const chave = registro.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (!historicoPrecos[chave]) {
+                historicoPrecos[chave] = [];
+            }
+            
+            const mes = registro.mes;
+            const existente = historicoPrecos[chave].find(h => h.mes === mes);
+            if (!existente) {
+                historicoPrecos[chave].push({
+                    mes: mes,
+                    valor: parseFloat(registro.valor)
+                });
+            }
+        });
+
+        salvarDadosLocais();
+        renderizarLista();
+    }
+
+    function renderizarHistorico() {
+        const container = document.getElementById('historicoLista');
+        const todosItens = [];
+
+        Object.keys(historicoPrecos).forEach(nome => {
+            const precos = historicoPrecos[nome];
+            precos.forEach(p => {
+                todosItens.push({
+                    nome: nome,
+                    mes: p.mes,
+                    valor: p.valor
+                });
+            });
+        });
+
+        todosItens.sort((a, b) => b.mes.localeCompare(a.mes));
+
+        if (todosItens.length === 0) {
+            container.innerHTML = '<div class="empty-state">Nenhum histórico encontrado</div>';
+            return;
+        }
+
+        container.innerHTML = todosItens.map(item => `
+            <div class="historico-item">
+                <span><strong>${escapeHtml(item.nome)}</strong> - ${formatarMes(item.mes)}</span>
+                <span>R$ ${item.valor.toFixed(2)}</span>
+            </div>
+        `).join('');
+    }
+
+    function formatarMes(mesStr) {
+        const [ano, mes] = mesStr.split('-');
+        const nomesMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        return `${nomesMeses[parseInt(mes)-1]}/${ano}`;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Event Listeners
+    document.getElementById('itemValor').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') adicionarItem();
+    });
+
+    document.getElementById('itemNome').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') document.getElementById('itemValor').focus();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') fecharAlerta();
+    });
+</script>
+</body>
+</html>
